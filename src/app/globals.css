@@ -142,6 +142,24 @@ label {
   font-weight: 700;
 }
 
+.storage-status {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  margin: -4px 0 16px;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.storage-status.cloud {
+  border-color: #bdd2be;
+  color: var(--green);
+  background: #edf8ee;
+}
+
 .workspace {
   display: grid;
   gap: 16px;

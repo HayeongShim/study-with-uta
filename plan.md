@@ -57,12 +57,12 @@ The app lets me register a song, paste full Japanese lyrics, run a one-time AI a
 - Styling: plain CSS modules/global CSS at first.
 - AI: OpenAI API through a server route.
 - Storage v1: browser local storage for fast MVP validation.
-- Storage v2: Supabase Postgres + Storage when deployment persistence is needed across PC and phone.
+- Storage v2: Supabase Postgres + Storage for PC-to-phone persistence.
 - Hosting: Vercel.
 
 ## Important Deployment Note
 
-Local storage is enough for the first local prototype, but it does not synchronize between PC and phone. Before serious hosted use, add Supabase persistence so both devices can see the same songs, analysis, sync data, and archived words.
+Local storage is enough for the first local prototype, but it does not synchronize between PC and phone. Supabase persistence is used so both devices can see the same songs, analysis, sync data, and archived words after environment variables and schema are configured.
 
 Because there is no login, the deployed app should be considered single-user and private-by-URL. If the URL may be exposed, add a simple deployment access key or Vercel-level protection.
 
@@ -74,6 +74,7 @@ Because there is no login, the deployed app should be considered single-user and
 - title
 - artist
 - audioUrl
+- audioPath
 - rawLyrics
 - createdAt
 - updatedAt

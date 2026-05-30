@@ -28,6 +28,7 @@ export type Song = {
   artist: string;
   audioUrl: string;
   audioStorageKey: string;
+  audioPath?: string;
   audioName: string;
   rawLyrics: string;
   lines: LyricLine[];

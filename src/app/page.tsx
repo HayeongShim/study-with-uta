@@ -4,6 +4,13 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyzeResponse, LyricLine, Song, VocabularyItem } from "@/lib/types";
 import { loadSongs, loadVocabulary, saveSongs, saveVocabulary } from "@/lib/storage";
 import { deleteAudioFile, getAudioFile, putAudioFile } from "@/lib/audio-storage";
+import {
+  deleteCloudSong,
+  fetchCloudSongs,
+  fetchCloudVocabulary,
+  saveCloudSong,
+  saveCloudVocabulary,
+} from "@/lib/cloud-client";
 
 type View = "setup" | "sync" | "study" | "words";
 
@@ -25,6 +32,8 @@ const emptySongForm: SongForm = {
 
 export default function Home() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cloudSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vocabularySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [selectedSongId, setSelectedSongId] = useState("");
@@ -35,6 +44,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [notice, setNotice] = useState("");
+  const [cloudEnabled, setCloudEnabled] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("로컬 저장");
   const [display, setDisplay] = useState({
     original: true,
     reading: true,
@@ -54,9 +65,14 @@ export default function Home() {
       setSelectedLineId(storedSongs[0].lines[0]?.id ?? "");
     }
 
-    hydrateAudioUrls(storedSongs).then(setSongs).catch(() => {
-      setNotice("저장된 오디오를 불러오지 못했어. 곡을 다시 업로드하면 복구돼.");
-    });
+    hydrateAudioUrls(storedSongs)
+      .then((hydratedSongs) => {
+        setSongs(hydratedSongs);
+        return hydrateFromCloud(hydratedSongs, storedVocabulary);
+      })
+      .catch(() => {
+        setNotice("저장된 오디오를 불러오지 못했어. 곡을 다시 업로드하면 복구돼.");
+      });
   }, []);
 
   useEffect(() => {
@@ -68,6 +84,36 @@ export default function Home() {
     if (!storageLoaded) return;
     saveVocabulary(vocabulary);
   }, [vocabulary, storageLoaded]);
+
+  useEffect(() => {
+    if (!cloudEnabled || !storageLoaded) return;
+    if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
+
+    cloudSaveTimerRef.current = setTimeout(() => {
+      syncSongsToCloud(songs).catch(() => {
+        setCloudStatus("DB 저장 실패");
+      });
+    }, 900);
+
+    return () => {
+      if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
+    };
+  }, [cloudEnabled, songs, storageLoaded]);
+
+  useEffect(() => {
+    if (!cloudEnabled || !storageLoaded) return;
+    if (vocabularySaveTimerRef.current) clearTimeout(vocabularySaveTimerRef.current);
+
+    vocabularySaveTimerRef.current = setTimeout(() => {
+      saveCloudVocabulary(vocabulary)
+        .then(() => setCloudStatus("DB 저장됨"))
+        .catch(() => setCloudStatus("DB 저장 실패"));
+    }, 900);
+
+    return () => {
+      if (vocabularySaveTimerRef.current) clearTimeout(vocabularySaveTimerRef.current);
+    };
+  }, [cloudEnabled, storageLoaded, vocabulary]);
 
   const selectedSong = useMemo(
     () => songs.find((song) => song.id === selectedSongId) ?? null,
@@ -82,6 +128,66 @@ export default function Home() {
   const archivedIds = useMemo(() => {
     return new Set(vocabulary.map((item) => `${item.sourceSongId}:${item.surface}`));
   }, [vocabulary]);
+
+  async function hydrateFromCloud(localSongs: Song[], localVocabulary: VocabularyItem[]) {
+    try {
+      const [cloudSongs, cloudVocabulary] = await Promise.all([
+        fetchCloudSongs(),
+        fetchCloudVocabulary(),
+      ]);
+
+      if (!cloudSongs || !cloudVocabulary) {
+        setCloudEnabled(false);
+        setCloudStatus("로컬 저장");
+        return;
+      }
+
+      setCloudEnabled(true);
+      setCloudStatus("DB 저장 활성화");
+
+      if (cloudSongs.length > 0) {
+        setSongs(cloudSongs);
+        setSelectedSongId(cloudSongs[0].id);
+        setSelectedLineId(cloudSongs[0].lines[0]?.id ?? "");
+      } else if (localSongs.length > 0) {
+        await syncSongsToCloud(localSongs);
+      }
+
+      if (cloudVocabulary.length > 0) {
+        setVocabulary(cloudVocabulary);
+      } else if (localVocabulary.length > 0) {
+        await saveCloudVocabulary(localVocabulary);
+      }
+    } catch {
+      setCloudEnabled(false);
+      setCloudStatus("DB 연결 실패");
+    }
+  }
+
+  async function syncSongsToCloud(songsToSave: Song[]) {
+    if (songsToSave.length === 0) return;
+
+    setCloudStatus("DB 저장 중");
+    const savedSongs = await Promise.all(
+      songsToSave.map(async (song) => {
+        const audioBlob = song.audioPath ? null : await getAudioFile(song.audioStorageKey);
+        return saveCloudSong(song, audioBlob, song.audioName);
+      }),
+    );
+    const savedById = new Map(savedSongs.filter((song): song is Song => Boolean(song)).map((song) => [song.id, song]));
+
+    setSongs((previous) =>
+      previous.map((song) => {
+        const saved = savedById.get(song.id);
+        if (!saved || song.audioPath === saved.audioPath) return song;
+        return {
+          ...song,
+          audioPath: saved.audioPath,
+        };
+      }),
+    );
+    setCloudStatus("DB 저장됨");
+  }
 
   function handleAudioFile(file: File | null) {
     if (!file) return;
@@ -142,6 +248,19 @@ export default function Home() {
     setForm(emptySongForm);
     setView("sync");
     setNotice("곡을 추가했어. 이제 AI 분석을 실행하거나 바로 싱크를 찍을 수 있어.");
+
+    saveCloudSong(song, form.audioFile, form.audioName)
+      .then((cloudSong) => {
+        if (!cloudSong) return;
+        setCloudEnabled(true);
+        setCloudStatus("DB 저장됨");
+        setSongs((previous) =>
+          previous.map((item) => (item.id === song.id ? { ...item, ...cloudSong } : item)),
+        );
+      })
+      .catch(() => {
+        setCloudStatus("DB 저장 실패");
+      });
   }
 
   async function analyzeSelectedSong() {
@@ -254,6 +373,7 @@ export default function Home() {
     setVocabulary((previous) => previous.filter((word) => word.sourceSongId !== songId));
     if (songToDelete) {
       await deleteAudioFile(songToDelete.audioStorageKey);
+      deleteCloudSong(songToDelete.id).catch(() => setCloudStatus("DB 삭제 실패"));
     }
 
     if (selectedSongId === songId) {
@@ -306,6 +426,8 @@ export default function Home() {
           </button>
         ))}
       </nav>
+
+      <p className={cloudEnabled ? "storage-status cloud" : "storage-status"}>{cloudStatus}</p>
 
       {notice ? <p className="notice">{notice}</p> : null}
 
