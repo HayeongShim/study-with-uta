@@ -534,7 +534,10 @@ export default function Home() {
                           type="button"
                           onClick={() => archiveWord(word, line)}
                         >
-                          {word.surface}
+                          <span className="word-surface">{word.surface}</span>
+                          <span className="word-detail">
+                            {word.reading} · {word.meaningKo}
+                          </span>
                         </button>
                       );
                     })}

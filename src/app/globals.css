@@ -434,18 +434,37 @@ audio {
 }
 
 .word-chips button {
-  min-height: 34px;
-  border-radius: 999px;
-  padding: 0 11px;
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  max-width: min(100%, 260px);
+  border-radius: 8px;
+  padding: 7px 10px;
   color: var(--blue);
   background: #edf6ff;
-  font-size: 0.9rem;
+  text-align: left;
   font-weight: 800;
 }
 
 .word-chips button.saved {
   color: var(--green);
   background: #edf8ee;
+}
+
+.word-surface,
+.word-detail {
+  overflow-wrap: anywhere;
+}
+
+.word-surface {
+  font-size: 0.95rem;
+}
+
+.word-detail {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .vocab-grid {
