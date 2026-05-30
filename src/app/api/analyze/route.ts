@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
             [
               "You analyze Japanese song lyrics for a Korean learner.",
               "Return only valid JSON matching the requested schema.",
-              "Keep translations natural and concise.",
+              "Before translating line by line, infer the overall mood, speaker attitude, and emotional register of the full lyrics.",
+              "Keep every Korean translation accurate to the source text while making the wording feel like one coherent song translation.",
+              "Use a consistent Korean tone across all lines, avoiding a mix of stiff literal phrasing and casual conversational phrasing unless the original lyrics clearly shift tone.",
+              "Keep translations natural, concise, and lyrical without adding meaning that is not present in the source.",
               "For reading fields, convert Japanese kanji to kana, but preserve Latin alphabet words exactly as written.",
               "For pronunciationKo, transliterate only Japanese text into Hangul and preserve Latin alphabet words exactly as written.",
               "Do not convert English or other Latin alphabet lyrics into katakana.",
@@ -49,6 +52,8 @@ export async function POST(request: NextRequest) {
             task:
               [
                 "For each input line, provide Japanese reading in kana, Korean pronunciation transliterated in Hangul, Korean translation, and 1-4 useful vocabulary items.",
+                "For translation, use the full set of lines as context so the Korean wording has one stable lyric tone from beginning to end.",
+                "Prefer clear Korean lyric phrasing over awkward dictionary-style fragments, but do not loosen the meaning.",
                 "Examples: どれも -> reading どれも, pronunciationKo 도레모.",
                 "I love 君 -> reading I love きみ, pronunciationKo I love 키미.",
                 "Never rewrite English as katakana, even when it appears inside Japanese lyrics.",
