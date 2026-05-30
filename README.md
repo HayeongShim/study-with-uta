@@ -21,6 +21,8 @@ OpenAI is needed for real lyric analysis.
 
 Supabase is optional. Without Supabase variables, the app keeps using local browser storage. With Supabase variables, songs, lyric analysis, timestamps, vocabulary, and audio files are synced through server API routes.
 
+Set `APP_ACCESS_PASSWORD` to require a password before anyone can use the app. Set `APP_ACCESS_SECRET` to any long random value so the access cookie token is not derived from the password alone.
+
 Required Supabase variables:
 
 - `SUPABASE_URL`
