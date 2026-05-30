@@ -4,11 +4,11 @@ const SONGS_KEY = "study-with-uta:songs";
 const VOCAB_KEY = "study-with-uta:vocabulary";
 
 export function loadSongs(): Song[] {
-  return readJson<Song[]>(SONGS_KEY, []);
+  return readJson<Song[]>(SONGS_KEY, []).map(sanitizeSong);
 }
 
 export function saveSongs(songs: Song[]) {
-  writeJson(SONGS_KEY, songs);
+  writeJson(SONGS_KEY, songs.map(sanitizeSong));
 }
 
 export function loadVocabulary(): VocabularyItem[] {
@@ -32,5 +32,21 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson<T>(key: string, value: T) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn(`Failed to save ${key} to localStorage.`, error);
+  }
+}
+
+function sanitizeSong(song: Song): Song {
+  return {
+    ...song,
+    audioStorageKey: song.audioStorageKey || `${song.id}:audio`,
+    audioUrl: "",
+    lines: song.lines.map((line) => ({
+      ...line,
+      pronunciationKo: line.pronunciationKo ?? "",
+    })),
+  };
 }

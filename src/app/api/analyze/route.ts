@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
             artist: body.artist ?? "",
             lines,
             task:
-              "For each input line, provide Japanese reading in kana, Korean translation, and 1-4 useful vocabulary items.",
+              "For each input line, provide Japanese reading in kana, Korean pronunciation transliterated in Hangul, Korean translation, and 1-4 useful vocabulary items. Example: どれも -> 도레모.",
           }),
         },
       ],
@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
                   properties: {
                     text: { type: "string" },
                     reading: { type: "string" },
+                    pronunciationKo: { type: "string" },
                     translation: { type: "string" },
                     vocabulary: {
                       type: "array",
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
                       },
                     },
                   },
-                  required: ["text", "reading", "translation", "vocabulary"],
+                  required: ["text", "reading", "pronunciationKo", "translation", "vocabulary"],
                 },
               },
             },
@@ -128,6 +129,7 @@ function createFallbackAnalysis(lines: string[]): AnalyzeResponse {
     lines: lines.map((line) => ({
       text: line,
       reading: "OPENAI_API_KEY 설정 후 실제 독음이 생성돼요",
+      pronunciationKo: "OPENAI_API_KEY 설정 후 한글 발음이 생성돼요",
       translation: "OPENAI_API_KEY 설정 후 한국어 번역이 생성돼요.",
       vocabulary: extractFallbackWords(line),
     })),

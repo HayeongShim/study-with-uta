@@ -3,15 +3,24 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyzeResponse, LyricLine, Song, VocabularyItem } from "@/lib/types";
 import { loadSongs, loadVocabulary, saveSongs, saveVocabulary } from "@/lib/storage";
+import { deleteAudioFile, getAudioFile, putAudioFile } from "@/lib/audio-storage";
 
 type View = "setup" | "sync" | "study" | "words";
 
-const emptySongForm = {
+type SongForm = {
+  title: string;
+  artist: string;
+  rawLyrics: string;
+  audioName: string;
+  audioFile: File | null;
+};
+
+const emptySongForm: SongForm = {
   title: "",
   artist: "",
   rawLyrics: "",
   audioName: "",
-  audioUrl: "",
+  audioFile: null,
 };
 
 export default function Home() {
@@ -21,6 +30,7 @@ export default function Home() {
   const [selectedSongId, setSelectedSongId] = useState("");
   const [view, setView] = useState<View>("setup");
   const [form, setForm] = useState(emptySongForm);
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -28,6 +38,7 @@ export default function Home() {
   const [display, setDisplay] = useState({
     original: true,
     reading: true,
+    pronunciationKo: true,
     translation: true,
   });
 
@@ -36,20 +47,27 @@ export default function Home() {
     const storedVocabulary = loadVocabulary();
     setSongs(storedSongs);
     setVocabulary(storedVocabulary);
+    setStorageLoaded(true);
 
     if (storedSongs[0]) {
       setSelectedSongId(storedSongs[0].id);
       setSelectedLineId(storedSongs[0].lines[0]?.id ?? "");
     }
+
+    hydrateAudioUrls(storedSongs).then(setSongs).catch(() => {
+      setNotice("저장된 오디오를 불러오지 못했어. 곡을 다시 업로드하면 복구돼.");
+    });
   }, []);
 
   useEffect(() => {
+    if (!storageLoaded) return;
     saveSongs(songs);
-  }, [songs]);
+  }, [songs, storageLoaded]);
 
   useEffect(() => {
+    if (!storageLoaded) return;
     saveVocabulary(vocabulary);
-  }, [vocabulary]);
+  }, [vocabulary, storageLoaded]);
 
   const selectedSong = useMemo(
     () => songs.find((song) => song.id === selectedSongId) ?? null,
@@ -65,40 +83,51 @@ export default function Home() {
     return new Set(vocabulary.map((item) => `${item.sourceSongId}:${item.surface}`));
   }, [vocabulary]);
 
-  async function handleAudioFile(file: File | null) {
+  function handleAudioFile(file: File | null) {
     if (!file) return;
 
-    const audioUrl = await fileToDataUrl(file);
     setForm((previous) => ({
       ...previous,
       audioName: file.name,
-      audioUrl,
+      audioFile: file,
     }));
   }
 
-  function createSong(event: FormEvent<HTMLFormElement>) {
+  async function createSong(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice("");
 
     const lyricTexts = splitLyrics(form.rawLyrics);
-    if (!form.title.trim() || !form.rawLyrics.trim() || !form.audioUrl || lyricTexts.length === 0) {
+    if (!form.title.trim() || !form.rawLyrics.trim() || !form.audioFile || lyricTexts.length === 0) {
       setNotice("곡 제목, 오디오 파일, 가사를 모두 넣어줘.");
       return;
     }
 
     const now = new Date().toISOString();
+    const songId = createId("song");
+    const audioStorageKey = `${songId}:audio`;
+
+    try {
+      await putAudioFile(audioStorageKey, form.audioFile);
+    } catch {
+      setNotice("오디오 파일 저장에 실패했어. 파일 크기를 줄이거나 브라우저 저장 공간을 확인해줘.");
+      return;
+    }
+
     const song: Song = {
-      id: createId("song"),
+      id: songId,
       title: form.title.trim(),
       artist: form.artist.trim(),
       audioName: form.audioName,
-      audioUrl: form.audioUrl,
+      audioUrl: URL.createObjectURL(form.audioFile),
+      audioStorageKey,
       rawLyrics: form.rawLyrics,
       lines: lyricTexts.map((text, index) => ({
         id: createId("line"),
         index,
         text,
         reading: "",
+        pronunciationKo: "",
         translation: "",
         startTime: null,
         vocabulary: [],
@@ -169,7 +198,11 @@ export default function Home() {
     });
   }
 
-  function updateLineText(lineId: string, field: "reading" | "translation", value: string) {
+  function updateLineText(
+    lineId: string,
+    field: "reading" | "pronunciationKo" | "translation",
+    value: string,
+  ) {
     if (!selectedSong) return;
 
     updateSong(selectedSong.id, {
@@ -208,10 +241,20 @@ export default function Home() {
     );
   }
 
-  function deleteSong(songId: string) {
+  function jumpToLine(line: LyricLine) {
+    if (line.startTime === null || !audioRef.current) return;
+    audioRef.current.currentTime = line.startTime;
+    setCurrentTime(line.startTime);
+  }
+
+  async function deleteSong(songId: string) {
+    const songToDelete = songs.find((song) => song.id === songId);
     const nextSongs = songs.filter((song) => song.id !== songId);
     setSongs(nextSongs);
     setVocabulary((previous) => previous.filter((word) => word.sourceSongId !== songId));
+    if (songToDelete) {
+      await deleteAudioFile(songToDelete.audioStorageKey);
+    }
 
     if (selectedSongId === songId) {
       setSelectedSongId(nextSongs[0]?.id ?? "");
@@ -419,6 +462,12 @@ export default function Home() {
                     placeholder="독음"
                   />
                   <input
+                    aria-label="한글 발음"
+                    value={line.pronunciationKo}
+                    onChange={(event) => updateLineText(line.id, "pronunciationKo", event.target.value)}
+                    placeholder="한글 발음"
+                  />
+                  <input
                     aria-label="번역"
                     value={line.translation}
                     onChange={(event) => updateLineText(line.id, "translation", event.target.value)}
@@ -437,6 +486,7 @@ export default function Home() {
             {[
               ["original", "원문"],
               ["reading", "독음"],
+              ["pronunciationKo", "한글발음"],
               ["translation", "번역"],
             ].map(([key, label]) => (
               <label key={key}>
@@ -458,9 +508,21 @@ export default function Home() {
           <div className="study-lines">
             {selectedSong.lines.map((line) => (
               <article className={activeLine?.id === line.id ? "study-line active" : "study-line"} key={line.id}>
-                {display.original ? <p className="jp">{line.text}</p> : null}
-                {display.reading && line.reading ? <p className="reading">{line.reading}</p> : null}
-                {display.translation && line.translation ? <p className="translation">{line.translation}</p> : null}
+                <button
+                  className="study-line-jump"
+                  type="button"
+                  disabled={line.startTime === null}
+                  onClick={() => jumpToLine(line)}
+                >
+                  {display.original ? <p className="jp">{line.text}</p> : null}
+                  {display.reading && line.reading ? <p className="reading">{line.reading}</p> : null}
+                  {display.pronunciationKo && line.pronunciationKo ? (
+                    <p className="pronunciation">{line.pronunciationKo}</p>
+                  ) : null}
+                  {display.translation && line.translation ? (
+                    <p className="translation">{line.translation}</p>
+                  ) : null}
+                </button>
                 {line.vocabulary.length > 0 ? (
                   <div className="word-chips">
                     {line.vocabulary.map((word) => {
@@ -523,6 +585,7 @@ function mergeAnalysis(lines: LyricLine[], analysis: AnalyzeResponse): LyricLine
     return {
       ...line,
       reading: analyzed.reading,
+      pronunciationKo: analyzed.pronunciationKo,
       translation: analyzed.translation,
       vocabulary: analyzed.vocabulary.map((word) => ({
         ...word,
@@ -548,20 +611,26 @@ function getActiveLine(lines: LyricLine[], currentTime: number) {
   return active;
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatTime(seconds: number) {
   const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
   const minutes = Math.floor(safeSeconds / 60);
   const remaining = Math.floor(safeSeconds % 60);
   return `${minutes}:${String(remaining).padStart(2, "0")}`;
+}
+
+async function hydrateAudioUrls(songs: Song[]): Promise<Song[]> {
+  const hydratedSongs = await Promise.all(
+    songs.map(async (song) => {
+      const file = await getAudioFile(song.audioStorageKey);
+      if (!file) return song;
+      return {
+        ...song,
+        audioUrl: URL.createObjectURL(file),
+      };
+    }),
+  );
+
+  return hydratedSongs;
 }
 
 function roundTime(seconds: number) {

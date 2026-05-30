@@ -28,6 +28,7 @@ The app lets me register a song, paste full Japanese lyrics, run a one-time AI a
    - Generate structured analysis per line:
      - Original Japanese line.
      - Reading/kana.
+     - Korean pronunciation guide.
      - Korean translation.
      - Vocabulary candidates.
    - Store the analysis result with the song.
@@ -40,7 +41,7 @@ The app lets me register a song, paste full Japanese lyrics, run a one-time AI a
 
 4. Mobile study player
    - Show current highlighted lyric line.
-   - Toggle original, reading, and Korean translation.
+   - Toggle original, reading, Korean pronunciation, and Korean translation.
    - Tap vocabulary words to archive them.
    - Keep playback controls usable on mobile.
 
@@ -84,6 +85,7 @@ Because there is no login, the deployed app should be considered single-user and
 - index
 - text
 - reading
+- pronunciationKo
 - translation
 - startTime
 - vocabulary

@@ -324,7 +324,7 @@ audio {
 
 .line-fields {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.2fr);
   gap: 10px;
   margin-top: 10px;
 }
@@ -375,6 +375,31 @@ audio {
   margin: 0;
 }
 
+.study-line-jump {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+}
+
+.study-line-jump:not(:disabled) {
+  cursor: pointer;
+}
+
+.study-line-jump:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.study-line-jump:focus-visible {
+  outline: 3px solid rgba(35, 90, 134, 0.32);
+  outline-offset: 4px;
+}
+
 .jp {
   color: var(--ink);
   font-size: clamp(1.2rem, 2.4vw, 1.8rem);
@@ -385,6 +410,13 @@ audio {
 .reading {
   margin-top: 6px !important;
   color: var(--blue);
+  line-height: 1.5;
+}
+
+.pronunciation {
+  margin-top: 6px !important;
+  color: var(--green);
+  font-weight: 800;
   line-height: 1.5;
 }
 

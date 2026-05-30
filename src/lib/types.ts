@@ -16,6 +16,7 @@ export type LyricLine = {
   index: number;
   text: string;
   reading: string;
+  pronunciationKo: string;
   translation: string;
   startTime: number | null;
   vocabulary: VocabularyItem[];
@@ -26,6 +27,7 @@ export type Song = {
   title: string;
   artist: string;
   audioUrl: string;
+  audioStorageKey: string;
   audioName: string;
   rawLyrics: string;
   lines: LyricLine[];
@@ -37,6 +39,7 @@ export type AnalyzeResponse = {
   lines: Array<{
     text: string;
     reading: string;
+    pronunciationKo: string;
     translation: string;
     vocabulary: Array<{
       surface: string;
