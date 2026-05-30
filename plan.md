@@ -27,8 +27,8 @@ The app lets me register a song, paste full Japanese lyrics, run a one-time AI a
    - Send lyrics to OpenAI.
    - Generate structured analysis per line:
      - Original Japanese line.
-     - Reading/kana.
-     - Korean pronunciation guide.
+     - Reading/kana, while preserving English as English.
+     - Korean pronunciation guide, while preserving English as English.
      - Korean translation.
      - Vocabulary candidates.
    - Store the analysis result with the song.

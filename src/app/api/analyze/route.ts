@@ -31,7 +31,14 @@ export async function POST(request: NextRequest) {
         {
           role: "system",
           content:
-            "You analyze Japanese song lyrics for a Korean learner. Return only valid JSON matching the requested schema. Keep translations natural and concise.",
+            [
+              "You analyze Japanese song lyrics for a Korean learner.",
+              "Return only valid JSON matching the requested schema.",
+              "Keep translations natural and concise.",
+              "For reading fields, convert Japanese kanji to kana, but preserve Latin alphabet words exactly as written.",
+              "For pronunciationKo, transliterate only Japanese text into Hangul and preserve Latin alphabet words exactly as written.",
+              "Do not convert English or other Latin alphabet lyrics into katakana.",
+            ].join(" "),
         },
         {
           role: "user",
@@ -40,7 +47,12 @@ export async function POST(request: NextRequest) {
             artist: body.artist ?? "",
             lines,
             task:
-              "For each input line, provide Japanese reading in kana, Korean pronunciation transliterated in Hangul, Korean translation, and 1-4 useful vocabulary items. Example: どれも -> 도레모.",
+              [
+                "For each input line, provide Japanese reading in kana, Korean pronunciation transliterated in Hangul, Korean translation, and 1-4 useful vocabulary items.",
+                "Examples: どれも -> reading どれも, pronunciationKo 도레모.",
+                "I love 君 -> reading I love きみ, pronunciationKo I love 키미.",
+                "Never rewrite English as katakana, even when it appears inside Japanese lyrics.",
+              ].join(" "),
           }),
         },
       ],
