@@ -34,6 +34,8 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cloudSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vocabularySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCloudSongsSnapshotRef = useRef("");
+  const lastCloudVocabularySnapshotRef = useRef("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>([]);
   const [selectedSongId, setSelectedSongId] = useState("");
@@ -87,10 +89,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!cloudEnabled || !storageLoaded) return;
+    const snapshot = createSongsSnapshot(songs);
+    if (snapshot === lastCloudSongsSnapshotRef.current) return;
+
     if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
 
     cloudSaveTimerRef.current = setTimeout(() => {
-      syncSongsToCloud(songs).catch(() => {
+      syncSongsToCloud(songs, snapshot).catch(() => {
         setCloudStatus("DB 저장 실패");
       });
     }, 900);
@@ -102,11 +107,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!cloudEnabled || !storageLoaded) return;
+    const snapshot = createVocabularySnapshot(vocabulary);
+    if (snapshot === lastCloudVocabularySnapshotRef.current) return;
+
     if (vocabularySaveTimerRef.current) clearTimeout(vocabularySaveTimerRef.current);
 
     vocabularySaveTimerRef.current = setTimeout(() => {
       saveCloudVocabulary(vocabulary)
-        .then(() => setCloudStatus("DB 저장됨"))
+        .then(() => {
+          lastCloudVocabularySnapshotRef.current = snapshot;
+          setCloudStatus("DB 저장됨");
+        })
         .catch(() => setCloudStatus("DB 저장 실패"));
     }, 900);
 
@@ -144,19 +155,22 @@ export default function Home() {
 
       setCloudEnabled(true);
       setCloudStatus("DB 저장 활성화");
+      lastCloudSongsSnapshotRef.current = createSongsSnapshot(cloudSongs);
+      lastCloudVocabularySnapshotRef.current = createVocabularySnapshot(cloudVocabulary);
 
       if (cloudSongs.length > 0) {
         setSongs(cloudSongs);
         setSelectedSongId(cloudSongs[0].id);
         setSelectedLineId(cloudSongs[0].lines[0]?.id ?? "");
       } else if (localSongs.length > 0) {
-        await syncSongsToCloud(localSongs);
+        await syncSongsToCloud(localSongs, createSongsSnapshot(localSongs));
       }
 
       if (cloudVocabulary.length > 0) {
         setVocabulary(cloudVocabulary);
       } else if (localVocabulary.length > 0) {
         await saveCloudVocabulary(localVocabulary);
+        lastCloudVocabularySnapshotRef.current = createVocabularySnapshot(localVocabulary);
       }
     } catch {
       setCloudEnabled(false);
@@ -164,7 +178,7 @@ export default function Home() {
     }
   }
 
-  async function syncSongsToCloud(songsToSave: Song[]) {
+  async function syncSongsToCloud(songsToSave: Song[], snapshot = createSongsSnapshot(songsToSave)) {
     if (songsToSave.length === 0) return;
 
     setCloudStatus("DB 저장 중");
@@ -175,17 +189,22 @@ export default function Home() {
       }),
     );
     const savedById = new Map(savedSongs.filter((song): song is Song => Boolean(song)).map((song) => [song.id, song]));
+    const nextSongs = songsToSave.map((song) => {
+      const saved = savedById.get(song.id);
+      if (!saved || song.audioPath === saved.audioPath) return song;
+      return {
+        ...song,
+        audioPath: saved.audioPath,
+      };
+    });
 
     setSongs((previous) =>
       previous.map((song) => {
-        const saved = savedById.get(song.id);
-        if (!saved || song.audioPath === saved.audioPath) return song;
-        return {
-          ...song,
-          audioPath: saved.audioPath,
-        };
+        const saved = nextSongs.find((savedSong) => savedSong.id === song.id);
+        return saved ?? song;
       }),
     );
+    lastCloudSongsSnapshotRef.current = createSongsSnapshot(nextSongs);
     setCloudStatus("DB 저장됨");
   }
 
@@ -248,19 +267,6 @@ export default function Home() {
     setForm(emptySongForm);
     setView("sync");
     setNotice("곡을 추가했어. 이제 AI 분석을 실행하거나 바로 싱크를 찍을 수 있어.");
-
-    saveCloudSong(song, form.audioFile, form.audioName)
-      .then((cloudSong) => {
-        if (!cloudSong) return;
-        setCloudEnabled(true);
-        setCloudStatus("DB 저장됨");
-        setSongs((previous) =>
-          previous.map((item) => (item.id === song.id ? { ...item, ...cloudSong } : item)),
-        );
-      })
-      .catch(() => {
-        setCloudStatus("DB 저장 실패");
-      });
   }
 
   async function analyzeSelectedSong() {
@@ -760,6 +766,47 @@ async function hydrateAudioUrls(songs: Song[]): Promise<Song[]> {
 
 function roundTime(seconds: number) {
   return Math.round(seconds * 10) / 10;
+}
+
+function createSongsSnapshot(songs: Song[]) {
+  return JSON.stringify(
+    songs.map((song) => ({
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      audioPath: song.audioPath,
+      audioName: song.audioName,
+      rawLyrics: song.rawLyrics,
+      updatedAt: song.updatedAt,
+      lines: song.lines.map((line) => ({
+        id: line.id,
+        index: line.index,
+        text: line.text,
+        reading: line.reading,
+        pronunciationKo: line.pronunciationKo,
+        translation: line.translation,
+        startTime: line.startTime,
+        vocabulary: line.vocabulary,
+      })),
+    })),
+  );
+}
+
+function createVocabularySnapshot(vocabulary: VocabularyItem[]) {
+  return JSON.stringify(
+    vocabulary.map((word) => ({
+      id: word.id,
+      surface: word.surface,
+      reading: word.reading,
+      meaningKo: word.meaningKo,
+      partOfSpeech: word.partOfSpeech,
+      sourceSongId: word.sourceSongId,
+      sourceLineId: word.sourceLineId,
+      sourceLineText: word.sourceLineText,
+      archivedAt: word.archivedAt,
+      learned: word.learned,
+    })),
+  );
 }
 
 function createId(prefix: string) {
